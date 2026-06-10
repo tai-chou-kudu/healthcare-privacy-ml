@@ -1,0 +1,121 @@
+version: 2
+
+models:
+  - name: stg_admissions
+    description: >
+      Staged admission cohort from MIMIC-III final_table. Filters to adults 18-89.
+      Derives age_band (10-year bins matching notebook generalize_age logic) and
+      ethnicity_grouped (41→6 categories using exact notebook ethnicity_map dict).
+    columns:
+      - name: subject_id
+        description: De-identified patient identifier.
+        tests:
+          - not_null
+      - name: hadm_id
+        description: Hospital admission identifier — unique per row in this model.
+        tests:
+          - not_null
+          - unique
+      - name: age_at_admission
+        description: Patient age at admission (18-89).
+        tests:
+          - not_null
+      - name: hospital_expire_flag
+        description: In-hospital mortality target (0=survived, 1=died). 10.86% positive rate.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['0', '1']
+              quote: false
+      - name: readmitted_30
+        description: 30-day readmission target (0=not readmitted, 1=readmitted). 6.25% positive rate.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['0', '1']
+              quote: false
+      - name: age_band
+        description: >
+          10-year age band as integer floor (e.g. age 78 → 70, age 27 → 20).
+          Matches notebook: (age // 10) * 10. Used as quasi-identifier in k-anonymity.
+        tests:
+          - not_null
+      - name: ethnicity_grouped
+        description: >
+          Ethnicity collapsed from 41 MIMIC-III values to 6 categories.
+          Exact match to notebook ethnicity_map dict. Used as quasi-identifier in k-anonymity.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['White', 'Black/African American', 'Hispanic/Latino', 'Asian', 'Other', 'Unknown']
+      - name: reidentification_risk
+        description: Privacy risk tier based on age and ethnicity quasi-identifiers.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['low_risk', 'medium_risk', 'high_risk']
+
+  - name: stg_lab_features
+    description: >
+      Staged lab values. creatinine, bun, bicarbonate are the 3 features used
+      in all notebook experiments. wbc, sodium, lactate exist in final_table
+      but were not included in the notebook feature set.
+    columns:
+      - name: subject_id
+        description: De-identified patient identifier.
+        tests:
+          - not_null
+      - name: hadm_id
+        description: Hospital admission identifier.
+        tests:
+          - not_null
+          - unique
+      - name: has_complete_labs
+        description: True if creatinine, bun, and bicarbonate are all non-null.
+        tests:
+          - not_null
+
+  - name: mart_cohort_privacy
+    description: >
+      Final ML-ready cohort for the Privacy-Utility Tradeoffs capstone.
+      Feature set exactly mirrors notebook: age_at_admission, ethnicity_grouped,
+      gender, admission_type, creatinine, bun, bicarbonate.
+      Each row is one unique hospital admission.
+    columns:
+      - name: subject_id
+        description: De-identified patient identifier.
+        tests:
+          - not_null
+      - name: hadm_id
+        description: Unique hospital admission — primary key of this mart.
+        tests:
+          - not_null
+          - unique
+      - name: hospital_expire_flag
+        description: Primary prediction target — in-hospital mortality.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['0', '1']
+              quote: false
+      - name: readmitted_30
+        description: Secondary prediction target — 30-day readmission.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['0', '1']
+              quote: false
+      - name: has_complete_labs
+        description: All 3 active lab features (creatinine, bun, bicarbonate) non-null.
+        tests:
+          - not_null
+      - name: reidentification_risk
+        description: Privacy risk tier for this record.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['low_risk', 'medium_risk', 'high_risk']
+      - name: dbt_loaded_at
+        description: Audit timestamp — when dbt materialized this row.
+        tests:
+          - not_null
